@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store';
 import { parseStateFromHash } from '$lib/utils/decode';
-import { STORAGE_KEY, defaultSettings } from '$lib/constants';
+import { STORAGE_KEY, UI_STORAGE_KEY, defaultSettings } from '$lib/constants';
 
 export type LuauMode = "strict" | "nonstrict" | "nocheck";
 export type SolverMode = "new" | "old";
@@ -43,22 +43,34 @@ function loadSettingsFromStorage(): PlaygroundSettings {
   
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as Partial<PlaygroundSettings>;
-      return {
-        mode: parsed.mode ?? defaultSettings.mode,
-        solver: parsed.solver ?? defaultSettings.solver,
-        optimizationLevel: parsed.optimizationLevel ?? defaultSettings.optimizationLevel,
-        debugLevel: parsed.debugLevel ?? defaultSettings.debugLevel,
-        outputFormat: parsed.outputFormat ?? defaultSettings.outputFormat,
-        compilerRemarks: parsed.compilerRemarks ?? defaultSettings.compilerRemarks,
-      };
-    }
+    if (!stored) return { ...defaultSettings };
+    return mergeSettings(JSON.parse(stored) as Partial<PlaygroundSettings>);
   } catch {
     // Ignore parse errors
+    return { ...defaultSettings };
   }
-  
-  return { ...defaultSettings };
+}
+
+function loadShowBytecodeFromStorage(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    return localStorage.getItem(UI_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveShowBytecodeToStorage(value: boolean): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(UI_STORAGE_KEY, value ? '1' : '0');
+  } catch {
+    // Ignore storage errors
+  }
 }
 
 function mergeSettings(partial: Partial<PlaygroundSettings>): PlaygroundSettings {
@@ -83,7 +95,7 @@ function loadSettings(): { settings: PlaygroundSettings; showBytecode: boolean }
     ? mergeSettings(settingsFromUrl)
     : loadSettingsFromStorage();
 
-  const showBytecode = showFromUrl ?? false;
+  const showBytecode = showFromUrl ?? loadShowBytecodeFromStorage();
 
   return {
     settings,
@@ -111,6 +123,11 @@ export const showBytecode = writable<boolean>(initialState.showBytecode);
 // Auto-save settings when they change
 settings.subscribe((value) => {
   saveSettings(value);
+});
+
+// Auto-save UI state when it changes
+showBytecode.subscribe((value) => {
+  saveShowBytecodeToStorage(value);
 });
 
 export function setMode(mode: LuauMode): void {

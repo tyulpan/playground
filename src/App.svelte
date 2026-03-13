@@ -3,12 +3,43 @@
   import Editor from '$lib/components/Editor.svelte';
   import Output from '$lib/components/Output.svelte';
   import BytecodeView from '$lib/components/BytecodeView.svelte';
-  import { showBytecode } from '$lib/stores/settings';
+  import { settings, showBytecode } from '$lib/stores/settings';
+  import { files, activeFile } from '$lib/stores/playground';
   import { isEmbed, embedTheme } from '$lib/stores/embed';
   import { initTheme, setTheme } from '$lib/utils/theme';
   import { loadLuauWasm } from '$lib/luau/wasm';
+  import { parseStateFromHash } from '$lib/utils/decode';
+  import { derived } from 'svelte/store';
+  import { onMount } from 'svelte';
 
   let mounted = $state(false);
+
+  function clearUrlHash(): void {
+    if (!window.location.hash) return;
+    const url = new URL(window.location.href);
+    url.hash = '';
+    window.history.replaceState(null, '', url.toString());
+  }
+
+  onMount(() => {
+    if (parseStateFromHash(window.location.hash) === null) return;
+
+    const stateChanges = derived([files, activeFile, settings, showBytecode], (values) => values);
+    let isFirstEmission = true;
+    let unsubscribe: () => void = () => {};
+
+    unsubscribe = stateChanges.subscribe(() => {
+      if (isFirstEmission) {
+        isFirstEmission = false;
+        return;
+      }
+
+      clearUrlHash();
+      unsubscribe();
+    });
+
+    return unsubscribe;
+  });
 
   // Initialize on mount
   $effect(() => {
